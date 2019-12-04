@@ -1,0 +1,140 @@
+#!/usr/bin/perl -w
+
+use warnings;
+use strict;
+use Getopt::Long qw/ GetOptions /;
+use Pod::Usage;
+
+# set up command line options
+my $col = 1;
+my $file;
+my $help = 0;
+my $man = 0;
+my $skip = 0;
+my $commentstr = "";
+my $sep = '\s+';
+
+GetOptions(
+	'column:i' => \$col,
+	'skip:i' => \$skip,
+	'comment:s' => \$commentstr,
+	'delimiter:s' => \$sep,
+	'help|?' => \$help,
+	'man' => \$man
+) or pod2usage( "-verbose" => 1 );
+
+pod2usage( "-verbose" => 1 ) if $help;
+pod2usage( "-verbose" => 2 ) if $man;
+my $comment_regex = join("|",split(//,$commentstr));
+
+my $file;
+if (@ARGV) {
+	$file = shift @ARGV;
+} else {
+	die "No file specified!\n";
+}
+
+open( my $in, '<', $file ) or die "Can't open $file for reading!\n";
+my $line;
+my $lineno = 0;
+for (my $i = 0; $i < $skip; $i++) {
+	$line = <$in>;
+	$lineno++;
+	print $line;
+}
+
+my ($lastval);
+my @linebuffer = ();
+
+# read in the first line
+$line = <$in>;
+$lineno++;
+
+my @f = split(/[$sep]/,$line);
+if ($col > @f) {
+	die "Not enough columns to perform operation at line $lineno!"
+}
+$lastval = $f[ $col-1 ];
+push @linebuffer, $line;
+
+LINELOOP: while(defined($line = <$in>)) {
+	$lineno++;
+
+	# check for comments
+	if ($commentstr) {
+		if ($line =~ /^\s*[${comment_regex}]/) {
+			next LINELOOP;
+		}
+	}
+
+	# process line
+	chomp($line);
+    my @f = split(/[$sep]/,$line);
+	if ($col > @f) {
+		die "Not enough columns to perform operation at line $lineno!"
+	}
+
+	my $nextval = $f[ $col-1 ];
+	if ($nextval > $lastval) {
+		print $line, "\n";
+		$lastval = $nextval;
+	}
+}
+close($in);
+
+__END__
+
+=head1 MONOTONIC
+
+monotonic - discard backward time steps in a timeseries file
+
+=head1 SYNOPSIS
+
+monotonic [options] file
+
+Options:
+	Help:
+	--help, -?		Brief help message
+	--man			Full documentation
+	
+	Optional:
+	--column		Column to keep monotonic, defaults to 1
+	--skip			File header lines to skip over, defaults to 0
+	--comment		Character(s) indicating a comment line to skip, 
+				defaults to none
+	--delimiter		Delimiter character[s] in the input file
+	
+	
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help, -?>
+
+Prints a brief help message and exits
+
+=item B<--man>
+
+Prints the full manual page and exits
+
+=item B<--column>
+
+The column to modify, starting at 1.  Defaults to 1 if not specified
+
+=item B<--skip>
+
+The number of lines at the header of the file to return without modification.  Defaults to 0
+
+=item B<--comment>
+
+One or more characters that indicate a comment line that is to be returned without modification.  Defaults to no comment characters.
+
+=item B<--delimiter>
+
+One or more characters to be treated as column delimiters.  Defaults to whitespace.
+
+=head1 DESCRIPTION
+
+B<monotonic> cleans up timeseries files that may have backward time steps or repeated time values by discarding lines whose time column value is not greater than the previous value.
+
+=cut

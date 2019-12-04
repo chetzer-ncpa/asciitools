@@ -81,7 +81,7 @@ foreach my $file (@files) {
 	
 		# process line
 		chomp($line);
-	        my @f = split(/[$sep]/,$line);
+	    my @f = split(/[$sep]/,$line);
 		if ($col > @f) {
 			die "Not enough columns to perform operation at line $lineno!"
 		}
