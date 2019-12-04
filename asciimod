@@ -2,36 +2,185 @@
 
 use warnings;
 use strict;
-use POSIX "fmod";
+use Getopt::Long qw/ GetOptions /;
+use Pod::Usage;
 
-die "Usage: asciimod <file> <column> {add|mult} <modifier> [ skip <lines> ]\n" if (4 != @ARGV and 6 != @ARGV);
-my ($file,$column,$operation,$modifier,$skipflag,$skiplines) = @ARGV;
-die "Can't find file $file!\n" unless -f $file;
-die "Columns must be a positive integer (>= 1)!\n" unless ($column >= 1 and fmod($column,1) == 0);
-die 'Operation must be either "add" or "mult"!'."\n" unless $operation eq "add" or $operation eq "mult";
-die "Modifier must be numeric!\n" unless $modifier * 1 == $modifier;
-if (6 == @ARGV) {
-	die '5th argument must be "skip"!'."\n" unless $skipflag eq "skip";
-	die "Lines must be a non-negative integer!\n" unless ($skiplines >= 0 and fmod($skiplines,1) == 0);
-} else {
-	$skiplines = 0;
-}
+# set up command line options
+my $skip = 0;
+my $commentstr = "";
+my $col = 1;
+my $op = "";
+my $format = "";
+my $mod = 0;
+my $verbose = 0;
+my $help = 0;
+my $man = 0;
+my $sep = '\s+';
+my $outsep = "default";
+GetOptions(
+	'skip:i' => \$skip,
+	'comment:s' => \$commentstr,
+	'column:i' => \$col,
+	'format:s' => \$format,
+	'delimiter:s' => \$sep,
+	'output-separator:s' => \$outsep,
+	'op=s' => \$op,
+	'mod=f' => \$mod,
+	'help|?' => \$help,
+	'man' => \$man
+) or pod2usage( "-verbose" => 1 );
 
-open(IN,$file) or die "Can't open $file for reading!\n";
-my $line;
-for (my $i = 0; $i < $skiplines; $i++) {
-	$line = <IN>;
-	print $line;
-}
-while(<IN>) {
-	chomp;
-	my @f = split;
-	if ($operation eq "add") {
-		$f[ $column-1 ] += $modifier;
+pod2usage( "-verbose" => 1 ) if $help;
+pod2usage( "-verbose" => 2 ) if $man;
+
+# process arguments
+die "No filename(s) specified!\n" unless (@ARGV);
+my @files = (@ARGV);
+
+if ($outsep eq 'default') {
+	if (substr($sep,0,1) eq "\\") {
+		$outsep = "  ";
 	} else {
-		$f[ $column-1 ] *= $modifier;
+		$outsep = substr( $sep, 0, 1 );
 	}
-	print "@f\n";
 }
-close(IN);
 
+my $comment_regex = join( "|", split(//,$commentstr) );
+if ($op eq "sub") {
+	$op = "add";
+	$mod = -$mod;
+} elsif ($op eq "div") {
+	$op = "mult";
+	$mod = 1.0 / $mod;
+} elsif ($op ne "add" and $op ne "mult") {
+	pod2usage(1);
+}
+
+foreach my $file (@files) {
+	open(my $in, '<', $file) or die "Can't open $file for reading!\n";
+	my $line;
+	my $lineno = 0;
+
+	# Skip lines if indicated
+	for (my $i = 0; $i < $skip; $i++) {
+	        $line = <$in>;
+		$lineno++;
+	        print $line;
+	}
+
+	LINELOOP: while(defined($line = <$in>)) {
+		$lineno++;
+
+		# check for comments
+		if ($commentstr) {
+			if ($line =~ /^\s*[${comment_regex}]/) {
+				print $line;
+				next LINELOOP;
+			}
+		}
+	
+		# process line
+		chomp($line);
+	        my @f = split(/[$sep]/,$line);
+		if ($col > @f) {
+			die "Not enough columns to perform operation at line $lineno!"
+		}
+	        if ($op eq "add") {
+	                $f[ $col-1 ] += $mod;
+	        } elsif ($op eq "mult") {
+	                $f[ $col-1 ] *= $mod;
+	        } else {
+	        	die "Unrecognized operation '$op'\n";
+	        }
+		if ($format) {
+			$f[ $col-1 ] = sprintf( $format, $f[ $col-1 ] );
+		}
+	        print join($outsep,@f), "\n";
+	}
+	close($in);
+}
+
+__END__
+
+=head1 ASCIIMOD
+
+asciimod - modify ASCII column values in-place
+
+=head1 SYNOPSIS
+
+asciimod [options] file [ file2 ... ]
+
+Options:
+	Help:
+	--help, -?		Brief help message
+	--man			Full documentation
+	
+	Required:
+	--op			Operation to perform, must be one of 
+				add, sub, mult, or div
+	--mod			The number to modify by
+
+	Optional:
+	--column		Column to modify, defaults to 1
+	--skip			File header lines to skip over, defaults to 0
+	--comment		Character(s) indicating a comment line to skip, 
+				defaults to none
+	--format		printf-stype format to use for modified field, 
+				defaults to allowing Perl to decide
+	--delimiter		Delimiter character[s] in the input file
+	--output-separator	Delimiter in output file.  Defaults to the first 
+				input delimiter character if specified, otherwise 
+				defaults to two spaces
+	
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help, -?>
+
+Prints a brief help message and exits
+
+=item B<--man>
+
+Prints the full manual page and exits
+
+=item B<--op>
+
+The operation to perform on the indicated column.  Must be one of 'add', 'sub', 'mult', or 'div'
+
+=item B<--mod>
+
+The value to use as the modification
+
+=item B<--column>
+
+The column to modify, starting at 1.  Defaults to 1 if not specified
+
+=item B<--skip>
+
+The number of lines at the header of the file to return without modification.  Defaults to 0
+
+=item B<--comment>
+
+One or more characters that indicate a comment line that is to be returned without modification.  Defaults to no comment characters.
+
+=item B<--format>
+
+The format to be used for the modified value (other values are returned as original).  Default allows Perl to decide using its own default format.
+
+=item B<--delimiter>
+
+One or more characters to be treated as column delimiters.  Defaults to whitespace.
+
+=item B<--output-separator>
+
+Character(s) to be used as an output separator.  Defaults to two spaces or the first character of the --delimiter option
+
+=back
+
+=head1 DESCRIPTION
+
+B<asciimod> modifies the values in the indicated column and outputs the new columns to the screen.  
+If multiple files are specified, outputs them all to the screen concatenated.
+
+=cut
