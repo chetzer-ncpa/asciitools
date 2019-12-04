@@ -1,0 +1,34 @@
+#!/usr/bin/perl -w
+
+# Usage: timeclip <file> <start> [ <end> ]
+# 
+# This program clips out a time window from a 2-column ASCII time/data
+# file and outputs it to STDOUT where it can be redirected if desired.
+
+if (@ARGV < 2 or @ARGV > 3) {
+	die "Usage: timeclip <file> <start> [ <end> ]\n";
+}
+
+my ($filename,$begtime,$endtime);
+if (2 == @ARGV) {
+	($filename,$begtime) = @ARGV;
+	$endtime = 1e99;
+} else {
+	($filename,$begtime,$endtime) = @ARGV;
+}
+
+die "Start time must be before end time!" unless $begtime < $endtime;
+
+open(IN,$filename) or die "Can't open $filename for reading!\n";
+
+while(<IN>) {
+	my @f = split;
+	if (m/^#/) {
+		print $_;
+		next;
+	}
+	print $_ unless ($f[0] < $begtime or $f[0] > $endtime);
+	last if $f[0] > $endtime;
+}
+close(IN);
+ 

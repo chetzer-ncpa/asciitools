@@ -1,0 +1,37 @@
+#!/usr/bin/perl -w
+
+use warnings;
+use strict;
+use POSIX "fmod";
+
+die "Usage: asciimod <file> <column> {add|mult} <modifier> [ skip <lines> ]\n" if (4 != @ARGV and 6 != @ARGV);
+my ($file,$column,$operation,$modifier,$skipflag,$skiplines) = @ARGV;
+die "Can't find file $file!\n" unless -f $file;
+die "Columns must be a positive integer (>= 1)!\n" unless ($column >= 1 and fmod($column,1) == 0);
+die 'Operation must be either "add" or "mult"!'."\n" unless $operation eq "add" or $operation eq "mult";
+die "Modifier must be numeric!\n" unless $modifier * 1 == $modifier;
+if (6 == @ARGV) {
+	die '5th argument must be "skip"!'."\n" unless $skipflag eq "skip";
+	die "Lines must be a non-negative integer!\n" unless ($skiplines >= 0 and fmod($skiplines,1) == 0);
+} else {
+	$skiplines = 0;
+}
+
+open(IN,$file) or die "Can't open $file for reading!\n";
+my $line;
+for (my $i = 0; $i < $skiplines; $i++) {
+	$line = <IN>;
+	print $line;
+}
+while(<IN>) {
+	chomp;
+	my @f = split;
+	if ($operation eq "add") {
+		$f[ $column-1 ] += $modifier;
+	} else {
+		$f[ $column-1 ] *= $modifier;
+	}
+	print "@f\n";
+}
+close(IN);
+
